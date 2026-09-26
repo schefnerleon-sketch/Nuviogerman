@@ -11,7 +11,7 @@
       "version": "1.0.0",
       "author": "Custom",
       "supportedTypes": ["tv"],
-      "filename": "providers/aniworld.js",
+      "filename": "providers/animeworld.js",
       "enabled": true,
       "contentLanguage": ["de", "en"]
     }
