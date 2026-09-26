@@ -1,21 +1,19 @@
 {
   "name": "AniWorld Plugin",
   "version": "1.0.0",
-  "description": "Nuvio scraper for AniWorld.to (German, English)",
+  "description": "AniWorld Provider for Nuvio",
   "author": "Custom",
   "scrapers": [
     {
       "id": "aniworld",
       "name": "AniWorld",
-      "description": "German dubbed and subbed anime from AniWorld.to",
+      "description": "AniWorld Scraper",
       "version": "1.0.0",
       "author": "Custom",
-      "supportedTypes": ["tv", "movie"],
+      "supportedTypes": ["tv"],
       "filename": "providers/aniworld.js",
       "enabled": true,
-      "formats": ["mp4", "m3u8"],
-      "logo": "https://aniworld.to/favicon.ico",
-      "contentLanguage": ["de", "en", "ja"]
+      "contentLanguage": ["de", "en"]
     }
   ]
 }
