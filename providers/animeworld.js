@@ -1,5 +1,5 @@
 // ================================================================
-// AniWorld Provider for Nuvio
+// AniWorld Provider for Nuvio (With Title Fallback)
 // Domain: aniworld.to (German & English)
 // ================================================================
 
@@ -16,6 +16,7 @@ function httpGet(url, extraHeaders) {
 }
 
 function slugify(text) {
+  if (!text) return "";
   return text
     .toLowerCase()
     .replace(/ä/g, "ae").replace(/ö/g, "oe").replace(/ü/g, "ue").replace(/ß/g, "ss")
@@ -23,13 +24,11 @@ function slugify(text) {
     .replace(/^-+|-+$/g, "");
 }
 
-function searchSite(title) {
-  var slug = slugify(title);
+function checkAnimeUrl(slug) {
   var url = BASE + "/anime/stream/" + slug;
-  
   return httpGet(url, { Referer: BASE + "/" })
     .then(function (html) {
-      if (html && (html.indexOf("hosterSiteVideo") !== -1 || html.indexOf("staffeln") !== -1)) {
+      if (html && (html.indexOf("hosterSiteVideo") !== -1 || html.indexOf("staffeln") !== -1 || html.indexOf("staffel-1") !== -1)) {
         return url;
       }
       return null;
@@ -37,6 +36,22 @@ function searchSite(title) {
     .catch(function () {
       return null;
     });
+}
+
+function searchSite(titles) {
+  // Geht die Liste der möglichen Titel nacheinander durch
+  var promiseChain = Promise.resolve(null);
+
+  titles.forEach(function(title) {
+    promiseChain = promiseChain.then(function(foundUrl) {
+      if (foundUrl) return foundUrl;
+      var slug = slugify(title);
+      if (!slug) return null;
+      return checkAnimeUrl(slug);
+    });
+  });
+
+  return promiseChain;
 }
 
 function getEpisodeUrl(seriesUrl, season, episode) {
@@ -52,7 +67,6 @@ function getEpisodeUrl(seriesUrl, season, episode) {
 
 function extractStreamsFromHtml(html, pageUrl) {
   var streams = [];
-  // Liest alle Hoster-Einträge auf der AniWorld-Episodenseite aus
   var re = /<li[^>]*data-link-target="([^"]+)"[^>]*>[\s\S]*?<h4[^>]*>([^<]+)<\/h4>/g;
   var m;
 
@@ -83,15 +97,19 @@ function getStreams(tmdbId, mediaType, season, episode) {
       return;
     }
 
+    // Fragt sowohl deutsche als auch englische/original Metadaten ab
     var tmdbUrl = "https://api.themoviedb.org/3/tv/" + tmdbId + "?api_key=" + TMDB_KEY + "&language=de-DE";
 
     fetch(tmdbUrl)
       .then(function (r) { return r.json(); })
       .then(function (meta) {
-        var title = meta.name || meta.original_name;
-        if (!title) throw new Error("No title");
+        var possibleTitles = [];
+        if (meta.name) possibleTitles.push(meta.name);
+        if (meta.original_name) possibleTitles.push(meta.original_name);
 
-        return searchSite(title);
+        if (possibleTitles.length === 0) throw new Error("Kein Titel gefunden");
+
+        return searchSite(possibleTitles);
       })
       .then(function (seriesUrl) {
         if (!seriesUrl) return null;
