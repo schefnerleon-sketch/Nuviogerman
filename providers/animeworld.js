@@ -1,8 +1,3 @@
-// ================================================================
-// AniWorld Provider for Nuvio (German & English)
-// Domain: aniworld.to
-// ================================================================
-
 var TMDB_KEY = "d80ba92bc7cefe3359668d30d06f3305";
 var BASE     = "https://aniworld.to";
 var UA       = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
@@ -50,19 +45,15 @@ function getEpisodePageUrl(animeUrl, season, episode) {
     });
 }
 
-function extractHosterLinks(html, epUrl) {
+function extractHosterLinks(html) {
   var hosters = [];
-  // Sucht nach Weiterleitungslinks zu Hostern (VOE, Vidoza, Streamtape, Doodstream)
   var re = /href="(\/redirect\/\d+)"[\s\S]*?<h4[^>]*>([^<]+)<\/h4>/g;
   var m;
 
   while ((m = re.exec(html)) !== null) {
-    var targetPath = m[1];
-    var hosterName = m[2].trim();
-
     hosters.push({
-      name: hosterName,
-      url: BASE + targetPath
+      name: m[2].trim(),
+      url: BASE + m[1]
     });
   }
 
@@ -72,7 +63,6 @@ function extractHosterLinks(html, epUrl) {
 function getStreams(tmdbId, mediaType, season, episode) {
   return new Promise(function (resolve) {
     if (mediaType === "movie") {
-      // AniWorld bietet hauptsächlich Serien an
       resolve([]);
       return;
     }
@@ -83,7 +73,7 @@ function getStreams(tmdbId, mediaType, season, episode) {
       .then(function (r) { return r.json(); })
       .then(function (meta) {
         var title = meta.name || meta.original_name;
-        if (!title) throw new Error("Kein Titel von TMDB gefunden");
+        if (!title) throw new Error("No title");
 
         return searchAniWorld(title);
       })
@@ -97,8 +87,7 @@ function getStreams(tmdbId, mediaType, season, episode) {
           return;
         }
 
-        var hosters = extractHosterLinks(epData.html, epData.url);
-        
+        var hosters = extractHosterLinks(epData.html);
         var results = hosters.map(function (hoster) {
           return {
             name: "AniWorld • " + hoster.name,
@@ -109,21 +98,18 @@ function getStreams(tmdbId, mediaType, season, episode) {
               "User-Agent": UA,
               "Referer": epData.url
             },
-            provider: "aniworld",
-            subtitles: []
+            provider: "animeworld"
           };
         });
 
         resolve(results);
       })
-      .catch(function (err) {
-        console.error("[AniWorld Provider]", err && err.message ? err.message : err);
+      .catch(function () {
         resolve([]);
       });
   });
 }
 
-// Export für Nuvio
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { getStreams: getStreams };
 } else {
