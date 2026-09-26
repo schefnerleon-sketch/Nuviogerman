@@ -1,5 +1,5 @@
 // ================================================================
-// AniWorld Provider for Nuvio (With Title Fallback)
+// AniWorld Provider for Nuvio (with Direct Hoster Unshorter)
 // Domain: aniworld.to (German & English)
 // ================================================================
 
@@ -9,7 +9,7 @@ var UA       = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KH
 
 function httpGet(url, extraHeaders) {
   var headers = Object.assign({ "User-Agent": UA }, extraHeaders || {});
-  return fetch(url, { headers: headers }).then(function (r) {
+  return fetch(url, { headers: headers, redirect: 'follow' }).then(function (r) {
     if (!r.ok) throw new Error("HTTP " + r.status);
     return r.text();
   });
@@ -39,7 +39,6 @@ function checkAnimeUrl(slug) {
 }
 
 function searchSite(titles) {
-  // Geht die Liste der möglichen Titel nacheinander durch
   var promiseChain = Promise.resolve(null);
 
   titles.forEach(function(title) {
@@ -65,29 +64,32 @@ function getEpisodeUrl(seriesUrl, season, episode) {
     });
 }
 
-function extractStreamsFromHtml(html, pageUrl) {
-  var streams = [];
+function resolveHosterRedirect(redirectUrl) {
+  // Verfolgt den AniWorld-Redirect zum tatsächlichen Hoster (z. B. VOE, Vidoza, Streamtape)
+  return fetch(redirectUrl, {
+    method: "GET",
+    headers: { "User-Agent": UA },
+    redirect: "follow"
+  }).then(function (res) {
+    return res.url; // Liefert die finale Hoster-URL zurück
+  }).catch(function () {
+    return null;
+  });
+}
+
+function extractHosterTargets(html) {
+  var redirectPaths = [];
   var re = /<li[^>]*data-link-target="([^"]+)"[^>]*>[\s\S]*?<h4[^>]*>([^<]+)<\/h4>/g;
   var m;
 
   while ((m = re.exec(html)) !== null) {
-    var targetPath = m[1];
-    var hosterName = m[2].trim();
-
-    streams.push({
-      name: "AniWorld • " + hosterName,
-      title: "AniWorld (DE/EN)",
-      url: BASE + targetPath,
-      quality: "HD",
-      headers: {
-        "User-Agent": UA,
-        "Referer": pageUrl
-      },
-      provider: "animeworld"
+    redirectPaths.push({
+      target: BASE + m[1],
+      name: m[2].trim()
     });
   }
 
-  return streams;
+  return redirectPaths;
 }
 
 function getStreams(tmdbId, mediaType, season, episode) {
@@ -97,7 +99,6 @@ function getStreams(tmdbId, mediaType, season, episode) {
       return;
     }
 
-    // Fragt sowohl deutsche als auch englische/original Metadaten ab
     var tmdbUrl = "https://api.themoviedb.org/3/tv/" + tmdbId + "?api_key=" + TMDB_KEY + "&language=de-DE";
 
     fetch(tmdbUrl)
@@ -121,8 +122,35 @@ function getStreams(tmdbId, mediaType, season, episode) {
           return;
         }
 
-        var results = extractStreamsFromHtml(epData.html, epData.url);
-        resolve(results);
+        var hosters = extractHosterTargets(epData.html);
+        
+        // Versucht die ersten 3 Hoster-Links aufzulösen
+        var promises = hosters.slice(0, 3).map(function (item) {
+          return resolveHosterRedirect(item.target).then(function (finalUrl) {
+            if (!finalUrl) return null;
+            return {
+              name: "AniWorld • " + item.name,
+              title: "AniWorld (DE/EN)",
+              url: finalUrl,
+              quality: "HD",
+              headers: {
+                "User-Agent": UA,
+                "Referer": epData.url
+              },
+              provider: "animeworld"
+            };
+          });
+        });
+
+        return Promise.all(promises);
+      })
+      .then(function (results) {
+        if (!results) {
+          resolve([]);
+          return;
+        }
+        var cleanResults = results.filter(function (r) { return r !== null; });
+        resolve(cleanResults);
       })
       .catch(function (err) {
         console.error("[AniWorld Provider Error]", err);
